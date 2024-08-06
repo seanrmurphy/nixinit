@@ -33,6 +33,10 @@
     channel.enable = false;
   };
 
+  # isoImage = {
+  #   isoName = "nixinit-bootstrap.iso";
+  # };
+
   networking.hostName = "nixinit-bootstrap";
 
   # TODO: Configure your system-wide user settings (groups, etc), add more users as needed.
