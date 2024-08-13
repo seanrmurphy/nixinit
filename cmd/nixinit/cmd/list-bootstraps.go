@@ -38,6 +38,11 @@ func init() {
 
 func listBootstraps(cmd *cobra.Command, args []string) {
 	bootstrapVMs, _ := getBootstrapVMs()
+	if len(bootstrapVMs) == 0 {
+		fmt.Printf("No bootstrap VMs found.\n")
+		return
+	}
+
 	for _, vm := range bootstrapVMs {
 		fmt.Printf("Bootstrap VM ID: %s\n", vm)
 	}
