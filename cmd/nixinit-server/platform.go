@@ -365,5 +365,4 @@ func getInstanceID() (string, error) {
 		return instanceID, err
 	}
 	return "", fmt.Errorf("Unable to retrieve instance ID - No cloud-init datasource found ")
-
 }
