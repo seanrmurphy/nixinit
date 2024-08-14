@@ -13,13 +13,17 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/kdomanski/iso9660"
 
 	"github.com/digitalocean/go-libvirt"
 	"gopkg.in/yaml.v3"
 )
 
-var defaultPoolName = "iso"
+var (
+	defaultPoolName = "iso"
+	isoFilename     = "/tmp/cidata.iso"
+)
 
 type UserData struct {
 	Description string `yaml:"description,omitempty"`
@@ -146,6 +150,16 @@ func downloadAndUploadImage(imageURL, imageName string) error {
 }
 
 func launchLibvirtInstance(qcowImageName, vmName string, memory uint64, vcpus uint) error {
+	// create random instanceID
+	instanceID := uuid.New().String()
+
+	userData := UserData{Description: fmt.Sprintf("Created by nixinit for instance ID: %s", instanceID)}
+	metaData := MetaData{InstanceID: instanceID}
+	err := createISO(isoFilename, userData, metaData)
+	if err != nil {
+		return fmt.Errorf("failed to marshal user data and metadata: %v", err)
+	}
+
 	uri, _ := url.Parse(string(libvirt.QEMUSystem))
 	l, err := libvirt.ConnectToURI(uri)
 	if err != nil {
@@ -156,14 +170,15 @@ func launchLibvirtInstance(qcowImageName, vmName string, memory uint64, vcpus ui
 
 	log.Printf("Connected to libvirt at %s", uri)
 
-	// Check if the ISO exists
+	// Check if the storage pool exists
 	poolName := defaultPoolName
 	pool, err := l.StoragePoolLookupByName(poolName)
 	if err != nil {
-		log.Fatalf("failed to lookup storage pool: %v", err)
+		log.Fatalf("storage pool lookup failed: %v", err)
 		return err
 	}
 
+	// check if the image exists
 	vol, err := l.StorageVolLookupByName(pool, qcowImageName)
 	if err != nil {
 		if libvirtErr, ok := err.(libvirt.Error); ok && libvirtErr.Code == uint32(libvirt.ErrNoStorageVol) {
@@ -171,7 +186,7 @@ func launchLibvirtInstance(qcowImageName, vmName string, memory uint64, vcpus ui
 			uploadBootstrapImage()
 
 		} else {
-			log.Fatalf("failed to lookup storage volume: %v", err)
+			log.Fatalf("storage volume lookup failed: %v", err)
 			return err
 		}
 	}
@@ -230,13 +245,19 @@ func launchLibvirtInstance(qcowImageName, vmName string, memory uint64, vcpus ui
           <source file='%s'/>
           <target dev='vda' bus='virtio'/>
         </disk>
+		    <disk type='file' device='cdrom'>
+					<driver name='qemu' type='raw'/>
+					<source file='%s'/>
+					<target dev='vdb' bus='sata'/>
+					<readonly/>
+				</disk>
         <interface type='network'>
           <source network='default'/>
           <model type='virtio'/>
         </interface>
         <console type='pty'/>
       </devices>
-    </domain>`, vmName, memory, vcpus, newVolPath)
+    </domain>`, vmName, memory, vcpus, newVolPath, isoFilename)
 
 	// Define the domain
 	dom, err := l.DomainDefineXML(xmlConfig)
@@ -261,8 +282,8 @@ func launchLibvirtInstance(qcowImageName, vmName string, memory uint64, vcpus ui
 	}
 
 	// Print VM status
-	fmt.Printf("Successfully launched VM '%s' from QCOW image '%s'\n", vmName, qcowImageName)
-	fmt.Printf("VM Status: %s (Reason: %d)\n", getDomainStateString(state), reason)
+	log.Printf("Successfully launched VM '%s' from QCOW image '%s'\n", vmName, qcowImageName)
+	log.Printf("VM Status: %s (Reason: %d)\n", getDomainStateString(state), reason)
 	return nil
 }
 
@@ -348,7 +369,7 @@ func getBootstrapVMs() ([]string, error) {
 	}
 
 	for _, dom := range domains {
-		log.Printf("Domain ID: %v, Name: %v\n", dom.ID, dom.Name)
+		// log.Printf("Domain ID: %v, Name: %v\n", dom.ID, dom.Name)
 		if dom.Name == "nixinit" {
 			bootstrapVMs = append(bootstrapVMs, fmt.Sprintf("%x", dom.UUID))
 		}
@@ -422,7 +443,7 @@ func removeInstance(instanceUUID string) error {
 		if err != nil {
 			return fmt.Errorf("failed to destroy running domain %s: %v", dom.Name, err)
 		}
-		fmt.Printf("Domain %s has been stopped\n", dom.Name)
+		log.Printf("Domain %s has been stopped\n", dom.Name)
 	}
 
 	// Undefine the domain
@@ -431,6 +452,6 @@ func removeInstance(instanceUUID string) error {
 		return fmt.Errorf("failed to undefine domain %s: %v", dom.Name, err)
 	}
 
-	fmt.Printf("Domain %s (UUID: %s) has been successfully removed\n", dom.Name, instanceUUID)
+	log.Printf("Domain %s (UUID: %s) has been successfully removed\n", dom.Name, instanceUUID)
 	return nil
 }
