@@ -8,3 +8,5 @@ vm-images/qcow/nixinit-bootstrap.qcow2
 vm-images/qcow-efi/result
 build
 vendor
+vm-images/qcow-efi/nixinit-bootstrap.qcow2
+configuration.nix
