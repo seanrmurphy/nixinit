@@ -26,6 +26,7 @@ const (
 	ConfiguringNixSystem
 	ShuttingDown
 	NixinitError
+	UnableToDetermineInstanceID
 )
 
 func (n NixInitState) String() string {
@@ -48,7 +49,6 @@ var (
 	host                 = "0.0.0.0"
 	validUser            = "nixinit"
 	sftpRootDirectory    = ""
-	instanceID           = "abcd"
 	currentState         = WaitingForNixConfig
 	nixinitDirectory     = "/uploads/nixinit" // should not have trailing /
 	configurationNixFile = "configuration.nix"
@@ -181,6 +181,7 @@ func (f fileGetHandler) Fileread(r *sftp.Request) (io.ReaderAt, error) {
 type filePutHandler struct{}
 
 func (f filePutHandler) Filewrite(r *sftp.Request) (io.WriterAt, error) {
+	pterm.Info.Printf("file upload request...\n")
 	path, filename := filepath.Split(r.Filepath)
 
 	// Check if the path is under /uploads/nixinit
@@ -367,7 +368,7 @@ func removeRootDirectory(root, path string) (string, error) {
 	return strings.TrimSuffix(pathWithSuffix, "/"), nil
 }
 
-func watchDirectory(dirPath string) {
+func watchDirectory(dirPath, instanceID string) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		log.Fatal(err)
@@ -382,11 +383,11 @@ func watchDirectory(dirPath string) {
 				if !ok {
 					return
 				}
-				if event.Op&fsnotify.Create == fsnotify.Create {
-					pterm.Info.Printf("New file/directory created: %v\n", event.Name)
+				if event.Op&fsnotify.Create == fsnotify.Create || event.Op&fsnotify.Write == fsnotify.Write {
+					pterm.Info.Printf("File created or modified: %v\n", event.Name)
 
 					// Handle other new files/directories
-					handleNewFile(event.Name)
+					handleNewFile(event.Name, instanceID)
 				}
 			case err, ok := <-watcher.Errors:
 				if !ok {
@@ -422,7 +423,7 @@ func extractInstanceID(directory string) (string, error) {
 	return "", nil
 }
 
-func handleNewFile(filePath string) {
+func handleNewFile(filePath, instanceID string) {
 	// Add your logic here to handle the new file
 	// For example, you could process the file, move it, etc.
 	pterm.Info.Printf("file watcher: New file uploaded: %s\n", filePath)
@@ -448,14 +449,14 @@ func handleNewFile(filePath string) {
 	}
 }
 
-func startWatcher(sftpRootDirectory string, path string, file string) {
+func startWatcher(sftpRootDirectory, path, file, instanceID string) {
 	// we assume this directory already exists
 	transformedDirectory := addRootDirectory(sftpRootDirectory, path)
 
 	pterm.Info.Printf("Watching directory: %s\n", transformedDirectory)
 
 	// Start watching the directory in a goroutine
-	watchDirectory(transformedDirectory)
+	watchDirectory(transformedDirectory, instanceID)
 }
 
 func startShutdownHandler(timerDuration time.Duration) {
@@ -471,7 +472,12 @@ func startShutdownHandler(timerDuration time.Duration) {
 
 func main() {
 
-	var err error
+	instanceID, err := getInstanceID()
+	if err != nil {
+		log.Fatalf("Failed to get instance ID - continuing in unusable state%v", err)
+		currentState = UnableToDetermineInstanceID
+	}
+
 	if sftpRootDirectory == "" {
 		// set sftpRootDirectory to the current working directory
 		sftpRootDirectory, err = os.Getwd()
@@ -490,7 +496,7 @@ func main() {
 	timerDuration := time.Hour
 	go startShutdownHandler(timerDuration)
 
-	go startWatcher(sftpRootDirectory, filepath.Join(nixinitDirectory, instanceID), configurationNixFile)
+	go startWatcher(sftpRootDirectory, filepath.Join(nixinitDirectory, instanceID), configurationNixFile, instanceID)
 
 	serverEndpoint := fmt.Sprintf("%s:%d", host, port)
 

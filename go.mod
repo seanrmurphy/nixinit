@@ -6,7 +6,9 @@ require (
 	github.com/digitalocean/go-libvirt v0.0.0-20240709142323-d8406205c752
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/gliderlabs/ssh v0.3.7
+	github.com/google/uuid v1.6.0
 	github.com/kdomanski/iso9660 v0.4.0
+	github.com/perlogix/libdetectcloud v0.0.0-20230721195148-b0a0473b5591
 	github.com/pkg/sftp v1.13.6
 	github.com/pterm/pterm v0.12.79
 	github.com/spf13/cobra v1.8.1
