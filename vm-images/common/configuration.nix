@@ -37,7 +37,15 @@
   #   isoName = "nixinit-bootstrap.iso";
   # };
 
-  networking.hostName = "nixinit-bootstrap";
+  networking = {
+    hostName = "nixinit-bootstrap";
+    # Enable the firewall
+    firewall = {
+      enable = true;
+      # Open port 2222
+      allowedTCPPorts = [ 2222 ];
+    };
+  };
 
   # TODO: Configure your system-wide user settings (groups, etc), add more users as needed.
   users.users = {
