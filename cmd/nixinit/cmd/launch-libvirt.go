@@ -282,8 +282,8 @@ func launchLibvirtInstance(qcowImageName, vmName string, memory uint64, vcpus ui
 	}
 
 	// Print VM status
-	fmt.Printf("Successfully launched VM '%s' from QCOW image '%s'\n", vmName, qcowImageName)
-	fmt.Printf("VM Status: %s (Reason: %d)\n", getDomainStateString(state), reason)
+	log.Printf("Successfully launched VM '%s' from QCOW image '%s'\n", vmName, qcowImageName)
+	log.Printf("VM Status: %s (Reason: %d)\n", getDomainStateString(state), reason)
 	return nil
 }
 
@@ -443,7 +443,7 @@ func removeInstance(instanceUUID string) error {
 		if err != nil {
 			return fmt.Errorf("failed to destroy running domain %s: %v", dom.Name, err)
 		}
-		fmt.Printf("Domain %s has been stopped\n", dom.Name)
+		log.Printf("Domain %s has been stopped\n", dom.Name)
 	}
 
 	// Undefine the domain
@@ -452,6 +452,6 @@ func removeInstance(instanceUUID string) error {
 		return fmt.Errorf("failed to undefine domain %s: %v", dom.Name, err)
 	}
 
-	fmt.Printf("Domain %s (UUID: %s) has been successfully removed\n", dom.Name, instanceUUID)
+	log.Printf("Domain %s (UUID: %s) has been successfully removed\n", dom.Name, instanceUUID)
 	return nil
 }

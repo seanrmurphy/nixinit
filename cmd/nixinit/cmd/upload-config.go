@@ -4,6 +4,7 @@ Copyright © 2024 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"fmt"
 	"log"
 	"net"
 	"os"
@@ -61,7 +62,7 @@ func uploadConfig(cmd *cobra.Command, args []string) {
 		pterm.Error.Printf("%s does not exist - exiting...\n", configurationFilename)
 		return
 	}
-	pterm.Info.Printf("%s exists\n", configurationFilename)
+	pterm.Info.Printf("%s found - will attempt to upload\n", configurationFilename)
 
 	// clientConfig, _ := auth.SshAgent("nixinit", ssh.InsecureIgnoreHostKey())
 
@@ -82,47 +83,17 @@ func uploadConfig(cmd *cobra.Command, args []string) {
 		ssh.PublicKeysCallback(agentClient.Signers),
 	}
 
-	sshClient, err := ssh.Dial("tcp", "127.0.0.1:2222", config)
+	sshAddr := fmt.Sprintf("%s:%d", addr, port)
+	pterm.Info.Printf("Connecting to ssh server on %s...\n", sshAddr)
+	sshClient, err := ssh.Dial("tcp", sshAddr, config)
 	if err != nil {
 		log.Fatalf("Failed to dial: %v", err)
 	}
 	defer sshClient.Close()
 
-	// Create a new SCP client
-	// remoteHost := fmt.Sprintf("%s:%d", addr, port)
-	// client := scp.NewClient(remoteHost, &clientConfig)
-	// pterm.Info.Printf("Connecting to remote host %s\n", remoteHost)
-	//
-	// // Connect to the remote server
-	// err := client.Connect()
-	// if err != nil {
-	// 	pterm.Error.Printf("Couldn't establish a connection to the remote server %v - exiting...", err)
-	// 	return
-	// }
-	//
-	// // Open a file
-	// f, _ := os.Open(configurationFilename)
-	//
-	// // Close client connection after the file has been copied
-	// defer client.Close()
-	//
-	// // Close the file after it has been copied
-	// defer f.Close()
-
-	// Finally, copy the file over
-	// Usage: CopyFromFile(context, file, remotePath, permission)
-
-	// the context can be adjusted to provide time-outs or inherit from other contexts if this is embedded in a larger application.
 	uploadFilename := filepath.Join("/uploads/nixinit", instanceID, configurationNixFilename)
-	// err = client.CopyFromFile(context.Background(), *f, uploadFilename, "0655")
-	// err = client.
-	//
-	// if err != nil {
-	// 	pterm.Error.Printf("Error uploading file...%v", err)
-	// }
 
-	// ---
-
+	pterm.Info.Printf("Uploading configuration file...\n")
 	// open an SFTP session over an existing ssh connection.
 	client, err := sftp.NewClient(sshClient)
 	if err != nil {
@@ -130,29 +101,19 @@ func uploadConfig(cmd *cobra.Command, args []string) {
 	}
 	defer client.Close()
 
-	// walk a directory
-	// w := client.Walk("/home/user")
-	// for w.Step() {
-	// 	if w.Err() != nil {
-	// 		continue
-	// 	}
-	// 	log.Println(w.Path())
-	// }
+	// read file into buffer
+	configurationFileData, err := os.ReadFile(configurationFilename)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	// leave your mark
 	f, err := client.Create(uploadFilename)
 	if err != nil {
 		log.Fatal(err)
 	}
-	if _, err := f.Write([]byte("Hello world!")); err != nil {
+	if _, err := f.Write(configurationFileData); err != nil {
 		log.Fatal(err)
 	}
 	f.Close()
-
-	// check it's there
-	fi, err := client.Lstat("hello.txt")
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.Println(fi)
+	pterm.Success.Printf("Configuration file uploaded...\n")
 }

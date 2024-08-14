@@ -4,8 +4,8 @@ Copyright © 2024 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
-	"fmt"
 	"html/template"
+	"log"
 	"os"
 	"strings"
 
@@ -117,21 +117,21 @@ func generateConfig(cmd *cobra.Command, args []string) {
 	// render the template with the provided parameters using the go tmpl library
 	tmpl, err := template.New("configuration.nix").Parse(configurationNixTemplate)
 	if err != nil {
-		fmt.Printf("Error parsing template: %v\n", err)
+		log.Printf("Error parsing template: %v\n", err)
 		return
 	}
 
 	var renderedTemplate strings.Builder
 	err = tmpl.Execute(&renderedTemplate, nixosConfigParams)
 	if err != nil {
-		fmt.Printf("Error executing template: %v\n", err)
+		log.Printf("Error executing template: %v\n", err)
 		return
 	}
 
 	// write the rendered template to configuration.nix
 	err = os.WriteFile(configurationNixFilename, []byte(renderedTemplate.String()), 0644)
 	if err != nil {
-		fmt.Printf("Error writing configuration.nix: %v\n", err)
+		log.Printf("Error writing configuration.nix: %v\n", err)
 		return
 	}
 

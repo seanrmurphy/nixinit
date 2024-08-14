@@ -4,7 +4,7 @@ Copyright © 2024 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
-	"fmt"
+	"log"
 
 	"github.com/spf13/cobra"
 )
@@ -40,7 +40,7 @@ func init() {
 
 func removeBootstraps(cmd *cobra.Command, args []string) {
 	if removeInstanceID == "" {
-		fmt.Println("Instance ID is required to remove bootstrap - exiting... ")
+		log.Println("Instance ID is required to remove bootstrap - exiting... ")
 		return
 	}
 
