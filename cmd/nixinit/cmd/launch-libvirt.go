@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/kdomanski/iso9660"
@@ -42,6 +43,28 @@ func uploadBootstrapImage() {
 	if err != nil {
 		log.Fatalf("Failed to download and upload bootstrap image: %v", err)
 	}
+}
+
+func getVMIPAddress(l *libvirt.Libvirt, dom libvirt.Domain) (string, error) {
+	// Get the list of interface addresses for the domain
+	ifaces, err := l.DomainInterfaceAddresses(dom, uint32(libvirt.DomainInterfaceAddressesSrcLease), 0)
+	if err != nil {
+		return "", fmt.Errorf("failed to get domain interface addresses: %v", err)
+	}
+
+	// Look for the first non-loopback IPv4 address
+	for _, iface := range ifaces {
+		for _, addr := range iface.Addrs {
+			// if addr.Type == libvirt.IPAddrTypeIPv4 && !strings.HasPrefix(addr.Addr, "127.") {
+			// 	return addr.Addr, nil
+			// }
+			if addr.Type == int32(libvirt.IPAddrTypeIpv4) && !strings.HasPrefix(addr.Addr, "127.") {
+				return addr.Addr, nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("no suitable IP address found for the domain")
 }
 
 func downloadAndUploadImage(imageURL, imageName string) error {
@@ -275,15 +298,43 @@ func launchLibvirtInstance(qcowImageName, vmName string, memory uint64, vcpus ui
 	}
 
 	// Get the status of the VM
+	// TODO: - check that the VM is running before trying to get its IP address
 	state, reason, err := l.DomainGetState(dom, 0)
 	if err != nil {
 		log.Fatalf("failed to get domain state: %v", err)
 		return err
 	}
+	if state != int32(libvirt.DomainRunning) {
+		log.Printf("Domain state: %s (reason: %s)", getDomainStateString(state), reason)
+		return fmt.Errorf("failed to start VM: domain state is not running")
+	}
 
 	// Print VM status
 	log.Printf("Successfully launched VM '%s' from QCOW image '%s'\n", vmName, qcowImageName)
-	log.Printf("VM Status: %s (Reason: %d)\n", getDomainStateString(state), reason)
+	log.Printf("Waiting for VM to boot...")
+
+	// Try to get the IP address up to 3 times
+	var ip string
+	for i := 0; i < 3; i++ {
+		log.Printf("Attempt %d to get VM IP address...", i+1)
+
+		// Wait for 10 seconds before attempting to get the IP
+		time.Sleep(10 * time.Second)
+
+		ip, err = getVMIPAddress(l, dom)
+		if err == nil {
+			log.Printf("VM IP Address: %s\n", ip)
+			break
+		}
+
+		log.Printf("Failed to get VM IP address: %v", err)
+
+		if i == 2 {
+			log.Printf("Failed to obtain VM IP address after 3 attempts")
+			return fmt.Errorf("failed to obtain VM IP address after 3 attempts")
+		}
+	}
+
 	return nil
 }
 
