@@ -1,6 +1,4 @@
-/*
-Copyright © 2024 NAME HERE <EMAIL ADDRESS>
-*/
+// Package cmd provides the command-line interface for the nixinit-server application.
 package cmd
 
 import (

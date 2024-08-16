@@ -1,6 +1,4 @@
-/*
-Copyright © 2024 NAME HERE <EMAIL ADDRESS>
-*/
+// Package cmd provides the command-line interface for the nixinit-server application.
 package cmd
 
 import (
@@ -44,5 +42,8 @@ func removeBootstraps(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	removeInstance(removeInstanceID)
+	err := removeInstance(removeInstanceID)
+	if err != nil {
+		log.Printf("Error removing bootstrap VM: %v", err)
+	}
 }

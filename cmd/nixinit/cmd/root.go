@@ -1,6 +1,4 @@
-/*
-Copyright © 2024 NAME HERE <EMAIL ADDRESS>
-*/
+// Package cmd provides the command-line interface for the nixinit-server application.
 package cmd
 
 import (
@@ -14,7 +12,7 @@ var rootCmd = &cobra.Command{
 	Use:   "nixinit",
 	Short: "A tool for initializing a remote nixos instance",
 	Long: `nixinit can be used to launch a bootstrap nixos instance,
-	generate a customized nixos configuration and upload this to the 
+	generate a customized nixos configuration and upload this to the
 	bootstrapped instance.`,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:

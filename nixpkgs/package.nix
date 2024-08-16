@@ -1,4 +1,4 @@
-{ 
+{
   lib
 , buildGoModule
 , fetchFromGitHub
@@ -24,9 +24,9 @@ buildGoModule rec {
   # Tests use network
   doCheck = false;
 
-  subPackages = [ 
-    "cmd/nixinit" 
-    "cmd/nixinit-server" 
+  subPackages = [
+    "cmd/nixinit"
+    "cmd/nixinit-server"
   ];
 
   #ldflags = [ "-X main.noVCSVersionOverride=${version}" ] ;
@@ -40,4 +40,3 @@ buildGoModule rec {
     mainProgram = "nixinit";
   };
 }
-
