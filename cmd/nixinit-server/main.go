@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bytes"
+	"embed"
 	"fmt"
 	"io"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"text/template"
@@ -29,21 +32,6 @@ const (
 	UnableToDetermineInstanceID
 )
 
-func (n NixInitState) String() string {
-	switch n {
-	case WaitingForNixConfig:
-		return "WAITING_FOR_NIX_CONFIG"
-	case ConfiguringNixSystem:
-		return "CONFIGURING_NIX_SYSTEM"
-	case ShuttingDown:
-		return "SHUTTING_DOWN"
-	case NixinitError:
-		return "NIXINIT_ERROR"
-	default:
-		return "UNKNOWN"
-	}
-}
-
 var (
 	port                 = 2222
 	host                 = "0.0.0.0"
@@ -52,7 +40,11 @@ var (
 	currentState         = WaitingForNixConfig
 	nixinitDirectory     = "/uploads/nixinit" // should not have trailing /
 	configurationNixFile = "configuration.nix"
+	nixosEtcDirectory    = "/etc/nixos"
 )
+
+//go:embed embed_files/flake.nix embed_files/hardware-configuration.nix embed_files/README.md
+var nixFiles embed.FS
 
 type responseParams struct {
 	ServerVersion string
@@ -80,6 +72,21 @@ directly; see nixinit documentation for more information.
 Terminating SSH session - goodbye!
 
 `
+
+func (n NixInitState) String() string {
+	switch n {
+	case WaitingForNixConfig:
+		return "WAITING_FOR_NIX_CONFIG"
+	case ConfiguringNixSystem:
+		return "CONFIGURING_NIX_SYSTEM"
+	case ShuttingDown:
+		return "SHUTTING_DOWN"
+	case NixinitError:
+		return "NIXINIT_ERROR"
+	default:
+		return "UNKNOWN"
+	}
+}
 
 func generateStandardResponse() (string, error) {
 	launchTime := time.Now().Add(-24 * time.Hour) // Assume the server started 24 hours ago
@@ -423,6 +430,105 @@ func extractInstanceID(directory string) (string, error) {
 	return "", nil
 }
 
+func copyFile(src, dst string) error {
+	sourceFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer sourceFile.Close()
+
+	// Create new file
+	destFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer destFile.Close()
+
+	// Copy the bytes to destination from source
+	_, err = io.Copy(destFile, sourceFile)
+	if err != nil {
+		return err
+	}
+
+	// Sync to ensure writes are completed
+	err = destFile.Sync()
+	return err
+}
+
+func writeEmbeddedFile(fs embed.FS, srcPath, destPath string) error {
+	data, err := fs.ReadFile(srcPath)
+	if err != nil {
+		return fmt.Errorf("failed to read embedded file %s: %v", srcPath, err)
+	}
+
+	err = os.WriteFile(destPath, data, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to write file %s: %v", destPath, err)
+	}
+
+	return nil
+}
+
+func generateConfigurationFiles(configurationPath string) error {
+	// copy file from configurationPath to /etc/nixos/configuration.nix
+	err := copyFile(configurationPath, filepath.Join(nixosEtcDirectory, "configuration.nix"))
+	if err != nil {
+		log.Printf("Error copying configuration file: %v\n", err)
+		return err
+	}
+
+	// Write flake.nix
+	if err := writeEmbeddedFile(nixFiles, "embed_files/flake.nix", filepath.Join(nixosEtcDirectory, "flake.nix")); err != nil {
+		log.Printf("Error writing flake.nix: %v\n", err)
+		return err
+	}
+
+	// Write hardware-configuration.nix
+	if err := writeEmbeddedFile(nixFiles, "embed_files/hardware-configuration.nix", filepath.Join(nixosEtcDirectory, "hardware-configuration.nix")); err != nil {
+		log.Printf("Error writing hardware-configuration.nix: %v\n", err)
+		return err
+	}
+
+	// Write README.md
+	if err := writeEmbeddedFile(nixFiles, "embed_files/README.md", filepath.Join(nixosEtcDirectory, "README.md")); err != nil {
+		log.Printf("Error writing README.md: %v\n", err)
+		return err
+	}
+
+	// write
+	return nil
+}
+
+func runNixosRebuild(configurationPath string) error {
+	log.Printf("Generating configuration files...\n")
+	// TODO: remove reference to home/test-user
+	err := generateConfigurationFiles(filepath.Join("/home/test-user", configurationPath))
+	if err != nil {
+		return fmt.Errorf("error generating configuration files: %v", err)
+	}
+
+	// create a new nixos generation
+	// assume this is being run in privileged mode
+	log.Printf("Running nixos-rebuild...\n")
+	cmd := exec.Command("nixos-rebuild", "build")
+	cmd.Dir = nixosEtcDirectory
+
+	var out bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &stderr
+
+	log.Printf("Running nixos-rebuild...")
+	err = cmd.Run()
+	if err != nil {
+		return fmt.Errorf("error running nixos build-vm: %v, stderr: %s", err, stderr.String())
+	}
+
+	log.Printf("nixos-rebuild complete: %s\n", out.String())
+	return nil
+
+}
+
 func handleNewFile(filePath, instanceID string) {
 	// Add your logic here to handle the new file
 	// For example, you could process the file, move it, etc.
@@ -442,6 +548,12 @@ func handleNewFile(filePath, instanceID string) {
 			pterm.Info.Printf("File uploaded to correct instance directory...%v\n", directory)
 			if filename == configurationNixFile {
 				pterm.Info.Printf("Configuration.nix file uploaded - starting nix reconfigure... \n")
+				err := runNixosRebuild(filepath.Join(directory, filename))
+				if err == nil {
+					log.Printf("New nix configuration applied - rebooting in 30 seconds...\n")
+				} else {
+					log.Printf("Error applying new nix configuration - please upload a new configuration...\n")
+				}
 			}
 		} else {
 			pterm.Info.Printf("Instance directory does not match: %s\n", directory)

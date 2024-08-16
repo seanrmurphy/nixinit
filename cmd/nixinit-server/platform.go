@@ -15,6 +15,8 @@ import (
 	"github.com/perlogix/libdetectcloud"
 )
 
+// CloudProvider defines the different cloud providers that can be used -
+// this is defined in libdetectcloud and can be any of the following:
 // Amazon Web Services, Microsoft Azure, Digital Ocean
 // Google Compute Engine, OpenStack, SoftLayer, Vultr
 // K8S Container, Container
@@ -47,17 +49,17 @@ var cloudProviderStrings = []string{
 	"Container",
 }
 
-var cloudProviderToString = map[CloudProvider]string{
-	AWS:          cloudProviderStrings[AWS],
-	Azure:        cloudProviderStrings[Azure],
-	DigitalOcean: cloudProviderStrings[DigitalOcean],
-	GCP:          cloudProviderStrings[GCP],
-	OpenStack:    cloudProviderStrings[OpenStack],
-	SoftLayer:    cloudProviderStrings[SoftLayer],
-	Vultr:        cloudProviderStrings[Vultr],
-	K8SContainer: cloudProviderStrings[K8SContainer],
-	Container:    cloudProviderStrings[Container],
-}
+// var cloudProviderToString = map[CloudProvider]string{
+// 	AWS:          cloudProviderStrings[AWS],
+// 	Azure:        cloudProviderStrings[Azure],
+// 	DigitalOcean: cloudProviderStrings[DigitalOcean],
+// 	GCP:          cloudProviderStrings[GCP],
+// 	OpenStack:    cloudProviderStrings[OpenStack],
+// 	SoftLayer:    cloudProviderStrings[SoftLayer],
+// 	Vultr:        cloudProviderStrings[Vultr],
+// 	K8SContainer: cloudProviderStrings[K8SContainer],
+// 	Container:    cloudProviderStrings[Container],
+// }
 
 var stringToCloudProvider = map[string]CloudProvider{
 	cloudProviderStrings[AWS]:          AWS,

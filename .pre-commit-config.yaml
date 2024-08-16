@@ -1,0 +1,46 @@
+# ==========================================================================
+# Golang Pre-Commit Hooks | https://github.com/tekwizely/pre-commit-golang
+#
+# !! ALL Hooks enabled by default - Comment out hooks you are not using
+#
+# Visit the project home page to learn more about the available Hooks,
+# including useful arguments you might want to pass into them.
+#
+# NOTE: When passing options to hooks, if your options contain a reference
+#       to an existing file, then you will need to use a trailing '--'
+#       argument to separate the hook options from the modified-file list
+#       that Pre-Commit passes into the hook.
+#       For repo-based hooks, '--' is not needed.
+#
+# NOTE: You can pass environment variables to hooks using args with the
+#       following format:
+#
+#           --hook:env:NAME=VALUE
+#
+# Consider adding aliases to longer-named hooks for easier CLI usage.
+# ==========================================================================
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+#       - id: end-of-file-fixer
+#       - id: check-yaml
+#       - id: check-toml
+#       - id: check-json
+#       - id: check-added-large-files
+#       - id: detect-aws-credentials
+#       - id: detect-private-key
+#
+#   - repo: https://github.com/tekwizely/pre-commit-golang
+#     rev: v1.0.0-rc.1
+#     hooks:
+#       - id: go-build-mod
+#       - id: go-mod-tidy
+#       - id: go-vet-mod
+#       - id: go-revive-mod
+#       - id: go-sec-mod
+#       - id: go-staticcheck-mod
+#         args: ["-checks", "all,-SA4006,-ST1000"]
+#       - id: go-lint
+#       - id: go-critic
