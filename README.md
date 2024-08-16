@@ -8,6 +8,3 @@ It comprises of three components:
 - a lightweight nix image which runs the above service by default
 - a client which can be used to launch the above image, generate a sensible
   default configuration.nix and upload this to the launched instance.
-
-
-

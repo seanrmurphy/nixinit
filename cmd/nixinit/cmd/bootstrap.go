@@ -1,6 +1,4 @@
-/*
-Copyright © 2024 NAME HERE <EMAIL ADDRESS>
-*/
+// Package cmd provides the command-line interface for the nixinit-server application.
 package cmd
 
 import (
@@ -39,5 +37,8 @@ func init() {
 func bootstrap(cmd *cobra.Command, args []string) {
 	log.Printf("Bootstrapping locally...")
 
-	launchLibvirtInstance("nixinit-bootstrap.qcow2", "nixinit", 4096, 2)
+	err := launchLibvirtInstance("nixinit-bootstrap.qcow2", "nixinit", 4096, 2)
+	if err != nil {
+		log.Printf("Error launching bootstrap VM: %v", err)
+	}
 }
