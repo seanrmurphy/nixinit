@@ -459,14 +459,16 @@ func extractInstanceID(directory string) (string, error) {
 }
 
 func copyFile(src, dst string) error {
-	sourceFile, err := os.Open(src)
+	cleanedSrc := filepath.Clean(src)
+	sourceFile, err := os.Open(cleanedSrc)
 	if err != nil {
 		return err
 	}
 	defer sourceFile.Close()
 
 	// Create new file
-	destFile, err := os.Create(dst)
+	cleanedDst := filepath.Clean(dst)
+	destFile, err := os.Create(cleanedDst)
 	if err != nil {
 		return err
 	}
@@ -489,7 +491,7 @@ func writeEmbeddedFile(fs embed.FS, srcPath, destPath string) error {
 		return fmt.Errorf("failed to read embedded file %s: %v", srcPath, err)
 	}
 
-	err = os.WriteFile(destPath, data, 0644)
+	err = os.WriteFile(destPath, data, 0600)
 	if err != nil {
 		return fmt.Errorf("failed to write file %s: %v", destPath, err)
 	}

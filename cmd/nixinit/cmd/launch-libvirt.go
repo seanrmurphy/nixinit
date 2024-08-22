@@ -194,6 +194,7 @@ func downloadAndUploadImage(imageURL, imageName string) error {
 func launchLibvirtInstance(qcowImageName, vmName string, memory uint64, vcpus uint) error {
 	// create random instanceID
 	instanceID := uuid.New().String()
+	log.Printf("Generated instance ID: %v", instanceID)
 
 	userData := UserData{Description: fmt.Sprintf("Created by nixinit for instance ID: %s", instanceID)}
 	metaData := MetaData{InstanceID: instanceID}
@@ -342,7 +343,7 @@ func launchLibvirtInstance(qcowImageName, vmName string, memory uint64, vcpus ui
 
 		ip, err = getVMIPAddress(l, dom)
 		if err == nil {
-			log.Printf("VM IP Address: %s\n", ip)
+			log.Printf("VM IP Address: %s (instance ID: %v)\n", ip, instanceID)
 			break
 		}
 
