@@ -21,6 +21,8 @@ import (
 	gossh "golang.org/x/crypto/ssh"
 )
 
+// NixInitState represents the state of the nixinit server; this can be seen by
+// ssh'ing to the server.
 type NixInitState int
 
 // add enum which captures the different states of the nixinit server
@@ -62,11 +64,11 @@ uptime: {{ .Uptime }} (since {{ .LaunchTime }})
 
 Welcome to nixinit-server!
 
-To complete initialiation of this server, you must upload an 
-appropriate nix configuration to the correct directory. The 
+To complete initialiation of this server, you must upload an
+appropriate nix configuration to the correct directory. The
 directory is /uploads/nixinit/<instance-id>.
 
-You can do this with the nixinit client or you can use scp 
+You can do this with the nixinit client or you can use scp
 directly; see nixinit documentation for more information.
 
 Terminating SSH session - goodbye!
@@ -118,8 +120,14 @@ func sshSessionHandler(s ssh.Session) {
 
 	if s.User() != validUser {
 		pterm.Info.Println("user invalid - terminating session...")
-		s.Write([]byte("user invalid - closing ssh session...\n"))
-		s.Exit(0)
+		_, err := s.Write([]byte("user invalid - closing ssh session...\n"))
+		if err != nil {
+			log.Printf("error writing to session: %v", err)
+		}
+		err = s.Exit(0)
+		if err != nil {
+			log.Printf("error exiting session: %v", err)
+		}
 		return
 	}
 
@@ -129,12 +137,24 @@ func sshSessionHandler(s ssh.Session) {
 	standardResponse, err := generateStandardResponse()
 	if err != nil {
 		pterm.Error.Printf("error generating standard response: %v\n", err)
-		s.Write([]byte(standardResponse))
-		s.Exit(0)
+		_, err = s.Write([]byte(standardResponse))
+		if err != nil {
+			log.Printf("error writing to session: %v", err)
+		}
+		err = s.Exit(0)
+		if err != nil {
+			log.Printf("error exiting session: %v", err)
+		}
 		return
 	}
-	s.Write([]byte(standardResponse))
-	s.Exit(0)
+	_, err = s.Write([]byte(standardResponse))
+	if err != nil {
+		log.Printf("error writing to session: %v", err)
+	}
+	err = s.Exit(0)
+	if err != nil {
+		log.Printf("error exiting session: %v", err)
+	}
 }
 
 func publicKeyHandler(ctx ssh.Context, key ssh.PublicKey) bool {
@@ -177,7 +197,8 @@ func (f fileGetHandler) Fileread(r *sftp.Request) (io.ReaderAt, error) {
 	}
 
 	// If it's not a directory, return the file content
-	file, err := os.Open(transformedFilename)
+	cleanedPath := filepath.Clean(transformedFilename)
+	file, err := os.Open(cleanedPath)
 	if err != nil {
 		return nil, sftp.ErrSshFxNoSuchFile
 	}
@@ -200,12 +221,13 @@ func (f filePutHandler) Filewrite(r *sftp.Request) (io.WriterAt, error) {
 	transformedFilename := filepath.Join(transformedDirectory, filename)
 
 	// Ensure the directory exists
-	if err := os.MkdirAll(transformedDirectory, 0755); err != nil {
+	if err := os.MkdirAll(transformedDirectory, 0750); err != nil {
 		return nil, sftp.ErrSshFxFailure
 	}
 
 	// Open the file for writing
-	file, err := os.OpenFile(transformedFilename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	cleanedPath := filepath.Clean(transformedFilename)
+	file, err := os.OpenFile(cleanedPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		return nil, sftp.ErrSshFxFailure
 	}
@@ -250,7 +272,7 @@ func (f fileCmdHandler) Filecmd(r *sftp.Request) error {
 		}
 
 	case "Mkdir":
-		err := os.Mkdir(path, 0755)
+		err := os.Mkdir(path, 0750)
 		if err != nil {
 			return sftp.ErrSshFxFailure
 		}
@@ -353,8 +375,12 @@ func sftpHandler(sess ssh.Session) {
 		serverOptions...,
 	)
 	if err := server.Serve(); err == io.EOF {
-		server.Close()
-		pterm.Info.Printf("sftp client exited session\n")
+		err = server.Close()
+		if err != nil {
+			pterm.Warning.Printf("error closing sftp session: %v\n", err)
+		} else {
+			pterm.Info.Printf("sftp client exited session\n")
+		}
 	} else if err != nil {
 		pterm.Info.Printf("sftp server completed with error: %v\n", err)
 	}
@@ -375,7 +401,7 @@ func removeRootDirectory(root, path string) (string, error) {
 	return strings.TrimSuffix(pathWithSuffix, "/"), nil
 }
 
-func watchDirectory(dirPath, instanceID string) {
+func watchDirectory(dirPath, instanceID string) error {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		log.Fatal(err)
@@ -407,9 +433,11 @@ func watchDirectory(dirPath, instanceID string) {
 
 	err = watcher.Add(dirPath)
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("Error adding watcher to directory: %v\n", err)
+		return fmt.Errorf("error adding watcher to directory: %v", err)
 	}
 	<-done
+	return nil
 }
 
 // extractInstanceId extracts the instanceId from the directory path - the instanceId
@@ -568,7 +596,10 @@ func startWatcher(sftpRootDirectory, path, file, instanceID string) {
 	pterm.Info.Printf("Watching directory: %s\n", transformedDirectory)
 
 	// Start watching the directory in a goroutine
-	watchDirectory(transformedDirectory, instanceID)
+	err := watchDirectory(transformedDirectory, instanceID)
+	if err != nil {
+		log.Fatalf("Failed to start watching directory: %v", err)
+	}
 }
 
 func startShutdownHandler(timerDuration time.Duration) {
@@ -599,7 +630,7 @@ func main() {
 		// make subdirectories /uploads/nixinit under the sftpRootDirectory
 		nixinitUploadsDirectory := addRootDirectory(sftpRootDirectory, nixinitDirectory)
 		instanceUploadsDirectory := filepath.Join(nixinitUploadsDirectory, instanceID)
-		err = os.MkdirAll(instanceUploadsDirectory, 0755)
+		err = os.MkdirAll(instanceUploadsDirectory, 0750)
 		if err != nil {
 			log.Fatalf("Failed to create directory %s: %v", nixinitUploadsDirectory, err)
 		}

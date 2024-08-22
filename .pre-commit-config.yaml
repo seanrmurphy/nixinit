@@ -24,23 +24,24 @@ repos:
     rev: v4.6.0
     hooks:
       - id: trailing-whitespace
-#       - id: end-of-file-fixer
-#       - id: check-yaml
-#       - id: check-toml
-#       - id: check-json
-#       - id: check-added-large-files
-#       - id: detect-aws-credentials
-#       - id: detect-private-key
-#
-#   - repo: https://github.com/tekwizely/pre-commit-golang
-#     rev: v1.0.0-rc.1
-#     hooks:
-#       - id: go-build-mod
-#       - id: go-mod-tidy
-#       - id: go-vet-mod
-#       - id: go-revive-mod
-#       - id: go-sec-mod
-#       - id: go-staticcheck-mod
-#         args: ["-checks", "all,-SA4006,-ST1000"]
-#       - id: go-lint
-#       - id: go-critic
+
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-added-large-files
+      - id: detect-aws-credentials
+      - id: detect-private-key
+
+  - repo: https://github.com/tekwizely/pre-commit-golang
+    rev: v1.0.0-rc.1
+    hooks:
+      - id: go-build-mod
+      - id: go-mod-tidy
+      - id: go-vet-mod
+      - id: go-revive-mod
+      - id: go-sec-mod
+      - id: go-staticcheck-mod
+        args: ["-checks", "all,-SA4006,-ST1000"]
+      - id: go-lint
+      - id: go-critic

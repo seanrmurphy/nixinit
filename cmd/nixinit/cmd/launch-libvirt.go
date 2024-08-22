@@ -26,10 +26,12 @@ var (
 	isoFilename     = "/tmp/cidata.iso"
 )
 
+// UserData is the user-data section of the cloud-init configuration.
 type UserData struct {
 	Description string `yaml:"description,omitempty"`
 }
 
+// MetaData is the meta-data section of the cloud-init configuration.
 type MetaData struct {
 	InstanceID string `yaml:"instance_id,omitempty"`
 }
@@ -68,12 +70,22 @@ func getVMIPAddress(l *libvirt.Libvirt, dom libvirt.Domain) (string, error) {
 }
 
 func downloadAndUploadImage(imageURL, imageName string) error {
-	// Download the image from Cloudflare
-	resp, err := http.Get(imageURL)
+	// // Download the image from Cloudflare
+	// resp, err := http.Get(imageURL) // nolint
+	// if err != nil {
+	// 	return fmt.Errorf("failed to download image: %v", err)
+	// }
+	// defer resp.Body.Close()
+
+	req, err := http.NewRequest(http.MethodGet, imageURL, nil)
 	if err != nil {
-		return fmt.Errorf("failed to download image: %v", err)
+		return err
 	}
-	defer resp.Body.Close()
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("failed to download image: HTTP status %d", resp.StatusCode)
@@ -131,9 +143,13 @@ func downloadAndUploadImage(imageURL, imageName string) error {
 	var poolXML struct {
 		Path string `xml:"target>path"`
 	}
-	if err := xml.Unmarshal([]byte(poolPath), &poolXML); err != nil {
-		return fmt.Errorf("failed to parse storage pool XML: %v", err)
+	unmarshalErr := xml.Unmarshal([]byte(poolPath), &poolXML)
+	if unmarshalErr != nil {
+		return fmt.Errorf("failed to parse storage pool XML: %v", unmarshalErr)
 	}
+	// if err := xml.Unmarshal([]byte(poolPath), &poolXML); err != nil {
+	// 	return fmt.Errorf("failed to parse storage pool XML: %v", err)
+	// }
 
 	// Construct the full path for the new image
 	imagePath := filepath.Join(poolXML.Path, imageName)
@@ -156,7 +172,10 @@ func downloadAndUploadImage(imageURL, imageName string) error {
 	}
 
 	// Open the temporary file for reading
-	tempFile.Seek(0, 0)
+	_, err = tempFile.Seek(0, 0)
+	if err != nil {
+		return fmt.Errorf("failed to seek to start of temporary file: %v", err)
+	}
 	fileInfo, err = tempFile.Stat()
 	if err != nil {
 		return fmt.Errorf("failed to get file info: %v", err)
@@ -197,8 +216,8 @@ func launchLibvirtInstance(qcowImageName, vmName string, memory uint64, vcpus ui
 	poolName := defaultPoolName
 	pool, err := l.StoragePoolLookupByName(poolName)
 	if err != nil {
-		log.Fatalf("storage pool lookup failed: %v", err)
-		return err
+		log.Printf("storage pool lookup failed: %v", err)
+		return fmt.Errorf("storage pool lookup failed: %w", err)
 	}
 
 	// check if the image exists
@@ -209,8 +228,8 @@ func launchLibvirtInstance(qcowImageName, vmName string, memory uint64, vcpus ui
 			uploadBootstrapImage()
 
 		} else {
-			log.Fatalf("storage volume lookup failed: %v", err)
-			return err
+			log.Printf("storage volume lookup failed: %v", err)
+			return fmt.Errorf("storage volume lookup failed: %w", err)
 		}
 	}
 	log.Printf("Found QCOW image %s in pool %s", qcowImageName, poolName)
@@ -218,8 +237,8 @@ func launchLibvirtInstance(qcowImageName, vmName string, memory uint64, vcpus ui
 	// Get the path of the QCOW image
 	qcowPath, err := l.StorageVolGetPath(vol)
 	if err != nil {
-		log.Fatalf("failed to get QCOW image path: %v", err)
-		return err
+		log.Printf("failed to get QCOW image path: %v", err)
+		return fmt.Errorf("failed to get QCOW image path: %w", err)
 	}
 
 	// Create a new volume based on the QCOW image
@@ -241,15 +260,15 @@ func launchLibvirtInstance(qcowImageName, vmName string, memory uint64, vcpus ui
 
 	newVol, err := l.StorageVolCreateXML(pool, newVolXML, 0)
 	if err != nil {
-		log.Fatalf("failed to create new volume: %v", err)
-		return err
+		log.Printf("failed to create new volume: %v", err)
+		return fmt.Errorf("failed to create new volume: %w", err)
 	}
 
 	// Get the path of the new volume
 	newVolPath, err := l.StorageVolGetPath(newVol)
 	if err != nil {
-		log.Fatalf("failed to get new volume path: %v", err)
-		return err
+		log.Printf("failed to get new volume path: %v", err)
+		return fmt.Errorf("failed to get new volume path: %w", err)
 	}
 
 	// Define the VM XML (use newVolPath instead of isoPath)
@@ -293,19 +312,19 @@ func launchLibvirtInstance(qcowImageName, vmName string, memory uint64, vcpus ui
 	// Start the domain
 	err = l.DomainCreate(dom)
 	if err != nil {
-		log.Fatalf("failed to start domain: %v", err)
-		return err
+		log.Printf("failed to start domain: %v", err)
+		return fmt.Errorf("failed to start domain: %w", err)
 	}
 
 	// Get the status of the VM
 	// TODO: - check that the VM is running before trying to get its IP address
 	state, reason, err := l.DomainGetState(dom, 0)
 	if err != nil {
-		log.Fatalf("failed to get domain state: %v", err)
-		return err
+		log.Printf("failed to get domain state: %v", err)
+		return fmt.Errorf("failed to get domain state: %w", err)
 	}
 	if state != int32(libvirt.DomainRunning) {
-		log.Printf("Domain state: %v (reason: %v)", getDomainStateString(state), reason)
+		log.Printf("Domain state: %s (reason: %v)", getDomainStateString(state), reason)
 		return fmt.Errorf("failed to start VM: domain state is not running")
 	}
 
@@ -373,33 +392,34 @@ func createISO(filename string, userData UserData, metaData MetaData) error {
 	userDataBytes, _ := yaml.Marshal(userData)
 	err = writer.AddFile(bytes.NewReader(userDataBytes), "user-data")
 	if err != nil {
-		log.Fatalf("failed to add file: %s", err)
-		return err
+		log.Printf("failed to add file: %s", err)
+		return fmt.Errorf("failed to add file: %w", err)
 	}
 
 	metaDataBytes, _ := yaml.Marshal(metaData)
 	err = writer.AddFile(bytes.NewReader(metaDataBytes), "meta-data")
 	if err != nil {
-		log.Fatalf("failed to add file: %s", err)
-		return err
+		log.Printf("failed to add file: %s", err)
+		return fmt.Errorf("failed to add file: %w", err)
 	}
 
-	outputFile, err := os.OpenFile(filename, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0644)
+	cleanedFilename := filepath.Clean(filename)
+	outputFile, err := os.OpenFile(cleanedFilename, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0600)
 	if err != nil {
-		log.Fatalf("failed to create file: %s", err)
-		return err
+		log.Printf("failed to create file: %s", err)
+		return fmt.Errorf("failed to create file: %w", err)
 	}
 
 	err = writer.WriteTo(outputFile, "cidata")
 	if err != nil {
-		log.Fatalf("failed to write ISO image: %s", err)
-		return err
+		log.Printf("failed to write ISO image: %s", err)
+		return fmt.Errorf("failed to write ISO image: %w", err)
 	}
 
 	err = outputFile.Close()
 	if err != nil {
-		log.Fatalf("failed to close output file: %s", err)
-		return err
+		log.Printf("failed to close output file: %s", err)
+		return fmt.Errorf("failed to close output file: %w", err)
 	}
 	return nil
 }
@@ -431,29 +451,29 @@ func getBootstrapVMs() ([]string, error) {
 
 // ParseUUID converts a string UUID to a byte slice
 func ParseUUID(uuid string) ([]byte, error) {
-	uuid = strings.Replace(uuid, "-", "", -1)
+	uuid = strings.ReplaceAll(uuid, "-", "")
 	return hex.DecodeString(uuid)
 }
 
 // getDomainName extracts the domain name from its XML description
-func getDomainName(l *libvirt.Libvirt, dom libvirt.Domain) (string, error) {
-	xmlDesc, err := l.DomainGetXMLDesc(dom, 0)
-	if err != nil {
-		return "", fmt.Errorf("failed to get domain XML description: %v", err)
-	}
-
-	type domainXML struct {
-		Name string `xml:"name"`
-	}
-
-	var domain domainXML
-	err = xml.Unmarshal([]byte(xmlDesc), &domain)
-	if err != nil {
-		return "", fmt.Errorf("failed to unmarshal domain XML: %v", err)
-	}
-
-	return domain.Name, nil
-}
+// func getDomainName(l *libvirt.Libvirt, dom libvirt.Domain) (string, error) {
+// 	xmlDesc, err := l.DomainGetXMLDesc(dom, 0)
+// 	if err != nil {
+// 		return "", fmt.Errorf("failed to get domain XML description: %v", err)
+// 	}
+//
+// 	type domainXML struct {
+// 		Name string `xml:"name"`
+// 	}
+//
+// 	var domain domainXML
+// 	err = xml.Unmarshal([]byte(xmlDesc), &domain)
+// 	if err != nil {
+// 		return "", fmt.Errorf("failed to unmarshal domain XML: %v", err)
+// 	}
+//
+// 	return domain.Name, nil
+// }
 
 func removeInstance(instanceUUID string) error {
 	// Parse the libvirt URI

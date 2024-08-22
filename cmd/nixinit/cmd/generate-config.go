@@ -1,6 +1,4 @@
-/*
-Copyright © 2024 NAME HERE <EMAIL ADDRESS>
-*/
+// Package cmd provides the command-line interface for the nixinit-server application.
 package cmd
 
 import (
@@ -13,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// NixConfigurationParams contains the parameters needed to generate a basic nix configuration file.
 type NixConfigurationParams struct {
 	Hostname          string
 	SSHPublicKey      string
@@ -23,7 +22,7 @@ type NixConfigurationParams struct {
 var generateConfigCmd = &cobra.Command{
 	Use:   "generate-config",
 	Short: "Generate a nix configuration which will be applied to your nix instance",
-	Long: `generate-config creates a configuration.nix based on a template with simple 
+	Long: `generate-config creates a configuration.nix based on a template with simple
 	substitutions for your context.`,
 	Run: generateConfig,
 }
@@ -64,7 +63,7 @@ var configurationNixTemplate = `
     nixos = {
       isNormalUser = true;
       openssh.authorizedKeys.keys = [
-				"{{ .SSHPublicKey }}" 
+				"{{ .SSHPublicKey }}"
       ];
       extraGroups = ["wheel"];
     };
@@ -130,7 +129,7 @@ func generateConfig(cmd *cobra.Command, args []string) {
 	}
 
 	// write the rendered template to configuration.nix
-	err = os.WriteFile(configurationNixFilename, []byte(renderedTemplate.String()), 0644)
+	err = os.WriteFile(configurationNixFilename, []byte(renderedTemplate.String()), 0600)
 	if err != nil {
 		log.Printf("Error writing configuration.nix: %v\n", err)
 		return
@@ -139,6 +138,4 @@ func generateConfig(cmd *cobra.Command, args []string) {
 	pterm.Success.Println("Successfully created configuration.nix")
 	pterm.Info.Println("You can customize configuration.nix according to your needs.")
 	pterm.Info.Println("When ready, you can upload the config to the bootstrapping instance with nixinit upload-config.")
-	return
-
 }

@@ -28,7 +28,7 @@
     nixos = {
       isNormalUser = true;
       openssh.authorizedKeys.keys = [
-				pubkey 
+				pubkey
       ];
       extraGroups = ["wheel"];
     };

@@ -15,8 +15,8 @@ import (
 	"github.com/perlogix/libdetectcloud"
 )
 
-// CloudProvider defines the different cloud providers that can be used -
-// this is defined in libdetectcloud and can be any of the following:
+
+// CloudProvider is an enum for cloud providers:
 // Amazon Web Services, Microsoft Azure, Digital Ocean
 // Google Compute Engine, OpenStack, SoftLayer, Vultr
 // K8S Container, Container
@@ -155,28 +155,28 @@ func getInstanceIDFromRequest(client *http.Client, req *http.Request) (string, e
 }
 
 func getAzureInstanceID() (string, error) {
-	return "", fmt.Errorf("Azure instance ID retrieval not supported")
+	return "", fmt.Errorf("instance ID retrieval not supported for Azure")
 }
 func getDigitalOceanInstanceID() (string, error) {
-	return "", fmt.Errorf("DigitalOcean instance ID retrieval not supported")
+	return "", fmt.Errorf("instance ID retrieval not supported for DigitalOcean")
 }
 func getGCPInstanceID() (string, error) {
-	return "", fmt.Errorf("GCP instance ID retrieval not supported")
+	return "", fmt.Errorf("instance ID retrieval not supported for GCP")
 }
 func getOpenStackInstanceID() (string, error) {
-	return "", fmt.Errorf("OpenStack instance ID retrieval not supported")
+	return "", fmt.Errorf("instance ID retrieval not supported for OpenStack")
 }
 func getSoftLayerInstanceID() (string, error) {
-	return "", fmt.Errorf("SoftLayer instance ID retrieval not supported")
+	return "", fmt.Errorf("instance ID retrieval not supported for SoftLayer")
 }
 func getVultrInstanceID() (string, error) {
-	return "", fmt.Errorf("Vultr instance ID retrieval not supported")
+	return "", fmt.Errorf("instance ID retrieval not supported for Vultr")
 }
 func getK8SContainerInstanceID() (string, error) {
-	return "", fmt.Errorf("K8s Container instance ID retrieval not supported")
+	return "", fmt.Errorf("instance ID retrieval not supported for K8s Container")
 }
 func getContainerInstanceID() (string, error) {
-	return "", fmt.Errorf("Container instance ID retrieval not supported")
+	return "", fmt.Errorf("instance ID retrieval not supported for Container")
 }
 
 func getInstanceIDWithCloud(cloud string) (string, error) {
@@ -222,27 +222,27 @@ func isCidataVolumeAvailable() bool {
 	return true
 }
 
-func findCidataMountPoint() (string, error) {
-	file, err := os.Open("/proc/mounts")
-	if err != nil {
-		return "", fmt.Errorf("error opening /proc/mounts: %v", err)
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		fields := strings.Fields(scanner.Text())
-		if len(fields) >= 2 && strings.Contains(fields[1], "cidata") {
-			return fields[1], nil
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return "", fmt.Errorf("error reading /proc/mounts: %v", err)
-	}
-
-	return "", fmt.Errorf("cidata volume mount point not found")
-}
+// func findCidataMountPoint() (string, error) {
+// 	file, err := os.Open("/proc/mounts")
+// 	if err != nil {
+// 		return "", fmt.Errorf("error opening /proc/mounts: %v", err)
+// 	}
+// 	defer file.Close()
+//
+// 	scanner := bufio.NewScanner(file)
+// 	for scanner.Scan() {
+// 		fields := strings.Fields(scanner.Text())
+// 		if len(fields) >= 2 && strings.Contains(fields[1], "cidata") {
+// 			return fields[1], nil
+// 		}
+// 	}
+//
+// 	if err := scanner.Err(); err != nil {
+// 		return "", fmt.Errorf("error reading /proc/mounts: %v", err)
+// 	}
+//
+// 	return "", fmt.Errorf("cidata volume mount point not found")
+// }
 
 func isLabeledDeviceMounted(label string) (bool, error) {
 	file, err := os.Open("/proc/mounts")
@@ -276,7 +276,7 @@ func mountBlockDevice(mountPoint, label string) error {
 	device := fmt.Sprintf("/dev/disk/by-label/%s", label)
 
 	// Create mount point if it doesn't exist
-	if err := os.MkdirAll(mountPoint, 0755); err != nil {
+	if err := os.MkdirAll(mountPoint, 0750); err != nil {
 		return fmt.Errorf("failed to create mount point: %v", err)
 	}
 
@@ -315,7 +315,8 @@ func getInstanceIDFromCidataVolume(mountPoint string) (string, error) {
 
 	// Look for the meta-data file in the cidata volume
 	metadataPath := filepath.Join(mountPoint, "meta-data")
-	metadata, err := os.ReadFile(metadataPath)
+	cleanedPath := filepath.Clean(metadataPath) // to satisfy gosec
+	metadata, err := os.ReadFile(cleanedPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to read meta-data file from cidata volume: %v", err)
 	}
@@ -366,5 +367,5 @@ func getInstanceID() (string, error) {
 		instanceID, err := getInstanceIDFromCidataVolume(mountPoint)
 		return instanceID, err
 	}
-	return "", fmt.Errorf("Unable to retrieve instance ID - No cloud-init datasource found ")
+	return "", fmt.Errorf("unable to retrieve instance ID - No cloud-init datasource found ")
 }

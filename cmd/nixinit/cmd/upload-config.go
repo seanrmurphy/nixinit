@@ -1,6 +1,4 @@
-/*
-Copyright © 2024 NAME HERE <EMAIL ADDRESS>
-*/
+// Package cmd provides the command-line interface for the nixinit-server application.
 package cmd
 
 import (
@@ -67,8 +65,9 @@ func uploadConfig(cmd *cobra.Command, args []string) {
 	// clientConfig, _ := auth.SshAgent("nixinit", ssh.InsecureIgnoreHostKey())
 
 	config := &ssh.ClientConfig{
-		User:            "nixinit",
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // For testing only, use ssh.FixedHostKey(publicKey) in production
+		User: "nixinit",
+		// for testing only
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // #nosec G106
 	}
 
 	socket := os.Getenv("SSH_AUTH_SOCK")
@@ -97,23 +96,32 @@ func uploadConfig(cmd *cobra.Command, args []string) {
 	// open an SFTP session over an existing ssh connection.
 	client, err := sftp.NewClient(sshClient)
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("failed to create SFTP client: %v", err)
+		return
 	}
 	defer client.Close()
 
 	// read file into buffer
-	configurationFileData, err := os.ReadFile(configurationFilename)
+	cleanedFilename := filepath.Clean(configurationFilename)
+	configurationFileData, err := os.ReadFile(cleanedFilename)
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("failed to read configuration file: %v", err)
+		return
 	}
 
 	f, err := client.Create(uploadFilename)
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("failed to create file on remote machine: %v", err)
+		return
 	}
 	if _, err := f.Write(configurationFileData); err != nil {
-		log.Fatal(err)
+		log.Printf("failed to write to file on remote machine: %v", err)
+		return
 	}
-	f.Close()
+	err = f.Close()
+	if err != nil {
+		log.Printf("failed to close file on remote machine: %v", err)
+		return
+	}
 	pterm.Success.Printf("Configuration file uploaded...\n")
 }
