@@ -277,10 +277,10 @@ func launchLibvirtInstance(qcowImageName, vmName string, memory uint64, vcpus ui
       <name>%s</name>
       <memory unit='MiB'>%d</memory>
       <vcpu>%d</vcpu>
-      <os>
-        <type arch='x86_64'>hvm</type>
-        <boot dev='hd'/>
-      </os>
+		  <os>
+				<type arch='x86_64' machine='pc-q35-8.2'>hvm</type>
+				<boot dev='hd'/>
+			</os>
       <devices>
         <disk type='file' device='disk'>
           <driver name='qemu' type='qcow2'/>

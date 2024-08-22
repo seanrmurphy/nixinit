@@ -41,6 +41,7 @@ var configurationNixTemplate = `
   lib,
   config,
   pkgs,
+	...
 }: {
 
   imports = [
@@ -54,7 +55,7 @@ var configurationNixTemplate = `
   };
 
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
-	nix.settings.channel.enable = false;
+	# nix.settings.channel.enable = false;
 
   networking.hostName = "{{ .Hostname }}";
 

@@ -15,6 +15,7 @@ import (
 	"github.com/perlogix/libdetectcloud"
 )
 
+
 // CloudProvider is an enum for cloud providers:
 // Amazon Web Services, Microsoft Azure, Digital Ocean
 // Google Compute Engine, OpenStack, SoftLayer, Vultr
