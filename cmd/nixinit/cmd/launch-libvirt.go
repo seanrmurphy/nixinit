@@ -21,9 +21,30 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// DomainDisk represents a disk in the domain XML
+type DomainDisk struct {
+	Type   string `xml:"type,attr"`
+	Device string `xml:"device,attr"`
+	Source struct {
+		File string `xml:"file,attr"`
+	} `xml:"source"`
+	Target struct {
+		Dev string `xml:"dev,attr"`
+		Bus string `xml:"bus,attr"`
+	} `xml:"target"`
+}
+
+// DomainXML represents the structure of the domain XML
+type DomainXML struct {
+	Devices struct {
+		Disks []DomainDisk `xml:"disk"`
+	} `xml:"devices"`
+}
+
 var (
-	defaultPoolName = "iso"
-	isoFilename     = "/tmp/cidata.iso"
+	nixinitIsoPoolName    = "nixinit-iso"
+	nixinitVolumePoolName = "nixinit-volume"
+	isoImageName          = "cidata"
 )
 
 // UserData is the user-data section of the cloud-init configuration.
@@ -69,46 +90,9 @@ func getVMIPAddress(l *libvirt.Libvirt, dom libvirt.Domain) (string, error) {
 	return "", fmt.Errorf("no suitable IP address found for the domain")
 }
 
-func downloadAndUploadImage(imageURL, imageName string) error {
-	// // Download the image from Cloudflare
-	// resp, err := http.Get(imageURL) // nolint
-	// if err != nil {
-	// 	return fmt.Errorf("failed to download image: %v", err)
-	// }
-	// defer resp.Body.Close()
-
-	req, err := http.NewRequest(http.MethodGet, imageURL, nil)
-	if err != nil {
-		return err
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to download image: HTTP status %d", resp.StatusCode)
-	}
-	log.Printf("Downloaded %s", imageName)
-
-	// Create a temporary file to store the downloaded image
-	tempFile, err := os.CreateTemp("", imageName)
-	if err != nil {
-		return fmt.Errorf("failed to create temporary file: %v", err)
-	}
-	defer os.Remove(tempFile.Name())
-	defer tempFile.Close()
-
-	// Copy the downloaded content to the temporary file
-	_, err = io.Copy(tempFile, resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to write image to temporary file: %v", err)
-	}
-	log.Printf("Wrote %s to temporary file", imageName)
-
+func uploadVolumeToStoragePool(filename, storagePool, imageName string) error {
 	// get size of file in bytes
-	fileInfo, err := os.Stat(tempFile.Name())
+	fileInfo, err := os.Stat(filename)
 	if err != nil {
 		return fmt.Errorf("failed to get file info: %v", err)
 	}
@@ -123,7 +107,7 @@ func downloadAndUploadImage(imageURL, imageName string) error {
 	defer l.Disconnect()
 
 	// Look up the default storage pool
-	pool, err := l.StoragePoolLookupByName(defaultPoolName)
+	pool, err := l.StoragePoolLookupByName(storagePool)
 	if err != nil {
 		return fmt.Errorf("failed to lookup storage pool: %v", err)
 	}
@@ -172,6 +156,11 @@ func downloadAndUploadImage(imageURL, imageName string) error {
 	}
 
 	// Open the temporary file for reading
+	filenameCleaned := filepath.Clean(filename)
+	tempFile, err := os.OpenFile(filenameCleaned, os.O_RDONLY, 0600)
+	if err != nil {
+		return fmt.Errorf("failed to open file: %v", err)
+	}
 	_, err = tempFile.Seek(0, 0)
 	if err != nil {
 		return fmt.Errorf("failed to seek to start of temporary file: %v", err)
@@ -182,13 +171,90 @@ func downloadAndUploadImage(imageURL, imageName string) error {
 	}
 
 	// Upload the image content to the new volume
-	err = l.StorageVolUpload(vol, tempFile, 0, uint64(fileInfo.Size()), 0)
+	err = l.StorageVolUpload(vol, tempFile, 0, uint64(fileSize), 0)
 	if err != nil {
 		return fmt.Errorf("failed to upload image content: %v", err)
 	}
 
-	log.Printf("Successfully downloaded and uploaded image %s to storage pool %s", imageName, defaultPoolName)
 	return nil
+}
+
+func downloadAndUploadImage(imageURL, imageName string) error {
+	// // Download the image from Cloudflare
+	// resp, err := http.Get(imageURL) // nolint
+	// if err != nil {
+	// 	return fmt.Errorf("failed to download image: %v", err)
+	// }
+	// defer resp.Body.Close()
+
+	req, err := http.NewRequest(http.MethodGet, imageURL, nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to download image: HTTP status %d", resp.StatusCode)
+	}
+	log.Printf("Downloaded %s", imageName)
+
+	// Create a temporary file to store the downloaded image
+	tempFile, err := os.CreateTemp("", imageName)
+	if err != nil {
+		return fmt.Errorf("failed to create temporary file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	// Copy the downloaded content to the temporary file
+	_, err = io.Copy(tempFile, resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to write image to temporary file: %v", err)
+	}
+	log.Printf("Wrote %s to temporary file", imageName)
+
+	// upload volume to libvirt
+	err = uploadVolumeToStoragePool(tempFile.Name(), nixinitVolumePoolName, imageName)
+	if err != nil {
+		return fmt.Errorf("failed to upload volume to storage pool: %v", err)
+	}
+
+	log.Printf("Successfully downloaded and uploaded image %s to storage pool %s", imageName, nixinitVolumePoolName)
+	return nil
+}
+
+func getIsoFilename(nixinitIsoPoolName, isoImageName string) (string, error) {
+	// Connect to libvirt
+	uri, _ := url.Parse(string(libvirt.QEMUSystem))
+	l, err := libvirt.ConnectToURI(uri)
+	if err != nil {
+		return "", fmt.Errorf("failed to connect to libvirt: %v", err)
+	}
+	defer l.Disconnect()
+
+	// Look up the storage pool
+	pool, err := l.StoragePoolLookupByName(nixinitIsoPoolName)
+	if err != nil {
+		return "", fmt.Errorf("failed to lookup storage pool: %v", err)
+	}
+
+	// Look up the volume in the pool
+	vol, err := l.StorageVolLookupByName(pool, isoImageName)
+	if err != nil {
+		return "", fmt.Errorf("failed to lookup volume: %v", err)
+	}
+
+	// Get the path of the volume
+	path, err := l.StorageVolGetPath(vol)
+	if err != nil {
+		return "", fmt.Errorf("failed to get volume path: %v", err)
+	}
+
+	return path, nil
 }
 
 func launchLibvirtInstance(qcowImageName, vmName string, memory uint64, vcpus uint) error {
@@ -198,7 +264,7 @@ func launchLibvirtInstance(qcowImageName, vmName string, memory uint64, vcpus ui
 
 	userData := UserData{Description: fmt.Sprintf("Created by nixinit for instance ID: %s", instanceID)}
 	metaData := MetaData{InstanceID: instanceID}
-	err := createISO(isoFilename, userData, metaData)
+	err := createISO(nixinitIsoPoolName, isoImageName, userData, metaData)
 	if err != nil {
 		return fmt.Errorf("failed to marshal user data and metadata: %v", err)
 	}
@@ -214,7 +280,7 @@ func launchLibvirtInstance(qcowImageName, vmName string, memory uint64, vcpus ui
 	log.Printf("Connected to libvirt at %s", uri)
 
 	// Check if the storage pool exists
-	poolName := defaultPoolName
+	poolName := nixinitVolumePoolName
 	pool, err := l.StoragePoolLookupByName(poolName)
 	if err != nil {
 		log.Printf("storage pool lookup failed: %v", err)
@@ -270,6 +336,11 @@ func launchLibvirtInstance(qcowImageName, vmName string, memory uint64, vcpus ui
 	if err != nil {
 		log.Printf("failed to get new volume path: %v", err)
 		return fmt.Errorf("failed to get new volume path: %w", err)
+	}
+
+	isoFilename, err := getIsoFilename(nixinitIsoPoolName, isoImageName)
+	if err != nil {
+		return fmt.Errorf("failed to get ISO filename: %v", err)
 	}
 
 	// Define the VM XML (use newVolPath instead of isoPath)
@@ -382,7 +453,46 @@ func getDomainStateString(state int32) string {
 	}
 }
 
-func createISO(filename string, userData UserData, metaData MetaData) error {
+// removeISO removes the ISO file from the system
+func removeISO(storagePool, isoFilename string) (err error) {
+
+	// Connect to libvirt
+	uri, _ := url.Parse(string(libvirt.QEMUSystem))
+	l, err := libvirt.ConnectToURI(uri)
+	if err != nil {
+		return fmt.Errorf("failed to connect to libvirt: %v", err)
+	}
+	defer l.Disconnect()
+
+	// Look up the default storage pool
+	pool, err := l.StoragePoolLookupByName(storagePool)
+	if err != nil {
+		return fmt.Errorf("failed to lookup storage pool: %v", err)
+	}
+
+	// Look up the volume in the pool
+	vol, err := l.StorageVolLookupByName(pool, filepath.Base(isoFilename))
+	if err != nil {
+		return fmt.Errorf("failed to lookup volume: %v", err)
+	}
+
+	// Delete the volume
+	err = l.StorageVolDelete(vol, 0)
+	if err != nil {
+		return fmt.Errorf("failed to delete volume: %v", err)
+	}
+
+	// Remove the local file
+	// err = os.Remove(isoFilename)
+	// if err != nil {
+	// 	return fmt.Errorf("failed to remove local ISO file: %v", err)
+	// }
+
+	log.Printf("Successfully removed ISO file %s from storage pool %s and local filesystem", isoFilename, storagePool)
+	return nil
+}
+
+func createISO(isoPoolName, filename string, userData UserData, metaData MetaData) error {
 	writer, err := iso9660.NewWriter()
 	if err != nil {
 		log.Fatalf("failed to create writer: %s", err)
@@ -422,6 +532,12 @@ func createISO(filename string, userData UserData, metaData MetaData) error {
 		log.Printf("failed to close output file: %s", err)
 		return fmt.Errorf("failed to close output file: %w", err)
 	}
+
+	err = uploadVolumeToStoragePool(filename, isoPoolName, "cidata")
+	if err != nil {
+		return fmt.Errorf("failed to upload ISO to storage pool: %w", err)
+	}
+
 	return nil
 }
 
@@ -476,6 +592,48 @@ func ParseUUID(uuid string) ([]byte, error) {
 // 	return domain.Name, nil
 // }
 
+func getVolumesAttachedToDomain(l *libvirt.Libvirt, dom libvirt.Domain) ([]string, error) {
+	// Get the XML description of the domain
+	xmlDesc, err := l.DomainGetXMLDesc(dom, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get domain XML description: %v", err)
+	}
+
+	// Parse the XML
+	var domainXML DomainXML
+	err = xml.Unmarshal([]byte(xmlDesc), &domainXML)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse domain XML: %v", err)
+	}
+
+	// Extract volume paths
+	var volumes []string
+	for _, disk := range domainXML.Devices.Disks {
+		if disk.Type == "file" && disk.Device == "disk" {
+			volumes = append(volumes, disk.Source.File)
+		}
+	}
+
+	return volumes, nil
+}
+
+func removeVolume(l *libvirt.Libvirt, volumePath string) error {
+	// Look up the volume by path
+	vol, err := l.StorageVolLookupByPath(volumePath)
+	if err != nil {
+		return fmt.Errorf("failed to find volume with path %s: %v", volumePath, err)
+	}
+
+	// Delete the volume
+	err = l.StorageVolDelete(vol, 0)
+	if err != nil {
+		return fmt.Errorf("failed to delete volume %s: %v", volumePath, err)
+	}
+
+	log.Printf("Volume %s has been successfully removed", volumePath)
+	return nil
+}
+
 func removeInstance(instanceUUID string) error {
 	// Parse the libvirt URI
 	uri, _ := url.Parse(string(libvirt.QEMUSystem))
@@ -503,6 +661,13 @@ func removeInstance(instanceUUID string) error {
 		return fmt.Errorf("failed to find domain with UUID %s: %v", instanceUUID, err)
 	}
 
+	// Get volumes attached to the domain
+	volumes, err := getVolumesAttachedToDomain(l, dom)
+	if err != nil {
+		log.Printf("Error getting volumes for domain: %v", err)
+		// Decide whether to continue or exit based on your requirements
+	}
+
 	// Check if the domain is running
 	state, _, err := l.DomainGetState(dom, 0)
 	if err != nil {
@@ -522,6 +687,23 @@ func removeInstance(instanceUUID string) error {
 	err = l.DomainUndefineFlags(dom, libvirt.DomainUndefineKeepNvram)
 	if err != nil {
 		return fmt.Errorf("failed to undefine domain %s: %v", dom.Name, err)
+	}
+
+	// Remove the volumes
+	for _, volume := range volumes {
+		log.Printf("Removing volume %s\n", volume)
+		err := removeVolume(l, volume)
+		if err != nil {
+			log.Printf("Error removing volume %s: %v", volume, err)
+			// Decide whether to continue with other volumes or return
+		}
+	}
+
+	// remove the ISO file
+	err = removeISO(nixinitIsoPoolName, isoImageName)
+	if err != nil {
+		log.Printf("Error removing ISO file: %v", err)
+		// Decide whether to continue or exit based on your requirements
 	}
 
 	log.Printf("Domain %s (UUID: %s) has been successfully removed\n", dom.Name, instanceUUID)
