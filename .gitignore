@@ -10,3 +10,4 @@ build
 vendor
 vm-images/qcow-efi/nixinit-bootstrap.qcow2
 configuration.nix
+cidata
