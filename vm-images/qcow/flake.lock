@@ -1,5 +1,26 @@
 {
   "nodes": {
+    "nixinit-server": {
+      "inputs": {
+        "nixpkgs": "nixpkgs"
+      },
+      "locked": {
+        "dir": "service-flake",
+        "lastModified": 1725896671,
+        "narHash": "sha256-ZgeLKyrstKMJWB0y8gPWNPadTrp0Lx9MFm5Fuzg3CmI=",
+        "owner": "seanrmurphy",
+        "repo": "nixinit",
+        "rev": "ec954a32b139d661dba9ecd43609bf24b72e1239",
+        "type": "github"
+      },
+      "original": {
+        "dir": "service-flake",
+        "owner": "seanrmurphy",
+        "ref": "add-flake-for-service",
+        "repo": "nixinit",
+        "type": "github"
+      }
+    },
     "nixlib": {
       "locked": {
         "lastModified": 1722128034,
@@ -38,6 +59,22 @@
     },
     "nixpkgs": {
       "locked": {
+        "lastModified": 1725858438,
+        "narHash": "sha256-8VRI+yaSBlR3u0rV9eBPJls0mfCyuNXtb1LxdaW2RuA=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "d4a22bbfc1db9ba06dd1acc03e0160b8a18ce6ec",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-24.05-small",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nixpkgs_2": {
+      "locked": {
         "lastModified": 1722062969,
         "narHash": "sha256-QOS0ykELUmPbrrUGmegAUlpmUFznDQeR4q7rFhl8eQg=",
         "owner": "NixOS",
@@ -53,8 +90,9 @@
     },
     "root": {
       "inputs": {
+        "nixinit-server": "nixinit-server",
         "nixos-generators": "nixos-generators",
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": "nixpkgs_2"
       }
     }
   },
