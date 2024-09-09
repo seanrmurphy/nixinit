@@ -1,3 +1,3 @@
 #! /usr/bin/env bash
 
-nix build .#qcow
+nix build --show-trace .#qcow
